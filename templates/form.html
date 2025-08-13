@@ -31,6 +31,14 @@
           {{ form.birthdate(class="form-control", placeholder="YYYY-MM-DD") }}
           {% for e in form.birthdate.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
         </div>
+        <div class="col-md-6">
+          <label class="form-label">Speciality</label>
+          {{ form.speciality(class="form-control") }}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Class</label>
+          {{ form.student_class(class="form-control") }}
+        </div>
       </div>
       <div class="mt-4 d-flex gap-2">
         {{ form.submit(class="btn btn-primary") }}
