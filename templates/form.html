@@ -1,5 +1,10 @@
 
 {% extends "base.html" %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/css/intlTelInput.css">
+{% endblock %}
+
 {% block content %}
 <div class="card shadow-sm">
   <div class="card-body">
@@ -24,7 +29,7 @@
         </div>
         <div class="col-md-3">
           <label class="form-label">Phone</label>
-          {{ form.phone(class="form-control") }}
+          {{ form.phone(class="form-control", id="phone") }}
         </div>
         <div class="col-md-3">
           <label class="form-label">Birthdate</label>
@@ -39,4 +44,17 @@
     </form>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/intlTelInput.min.js"></script>
+<script>
+  const input = document.querySelector("#phone");
+  const iti = window.intlTelInput(input, {
+    utilsScript: "https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/utils.js"
+  });
+  input.form.addEventListener("submit", function() {
+    input.value = iti.getNumber();
+  });
+</script>
 {% endblock %}

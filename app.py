@@ -27,7 +27,7 @@ class StudentForm(FlaskForm):
     first_name = StringField("First name", validators=[DataRequired(), Length(max=80)])
     last_name = StringField("Last name", validators=[DataRequired(), Length(max=80)])
     email = StringField("Email", validators=[DataRequired(), Email(), Length(max=120)])
-    phone = StringField("Phone", validators=[Optional(), Length(max=30)])
+    phone = StringField("Phone", validators=[Optional(), Length(max=30)], render_kw={"type": "tel"})
     birthdate = DateField("Birthdate (YYYY-MM-DD)", validators=[Optional()], format="%Y-%m-%d")
     submit = SubmitField("Save")
 
