@@ -1,0 +1,79 @@
+
+{% extends "base.html" %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h5 class="card-title mb-3">{{ title }}</h5>
+    <form method="post" novalidate>
+      {{ form.hidden_tag() }}
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">First name</label>
+          {{ form.first_name(class="form-control") }}
+          {% for e in form.first_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Last name</label>
+          {{ form.last_name(class="form-control") }}
+          {% for e in form.last_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Email</label>
+          {{ form.email(class="form-control") }}
+          {% for e in form.email.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Class</label>
+          {{ form.class_name(class="form-select", id="class-select") }}
+          {% for e in form.class_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Specialty</label>
+          {{ form.specialty_name(class="form-select", id="specialty-select") }}
+          {% for e in form.specialty_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Phone</label>
+          {{ form.phone(class="form-control") }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Birthdate</label>
+          {{ form.birthdate(class="form-control", placeholder="YYYY-MM-DD") }}
+          {% for e in form.birthdate.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+      </div>
+      <div class="mt-4 d-flex gap-2">
+        {{ form.submit(class="btn btn-primary") }}
+        <a class="btn btn-outline-secondary" href="{{ url_for('index') }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('class-select');
+    const specSelect = document.getElementById('specialty-select');
+    function loadSpecialties(selected) {
+      const cls = classSelect.value;
+      if (!cls) { specSelect.innerHTML = ''; return; }
+      fetch(`/classes/${encodeURIComponent(cls)}/specialties`)
+        .then(r => r.json())
+        .then(data => {
+          specSelect.innerHTML = '';
+          data.specialties.forEach(function(s) {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = s;
+            if (selected && selected === s) opt.selected = true;
+            specSelect.appendChild(opt);
+          });
+        });
+    }
+    classSelect.addEventListener('change', function() { loadSpecialties(); });
+    loadSpecialties(specSelect.value);
+  });
+</script>
+{% endblock %}
