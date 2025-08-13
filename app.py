@@ -20,6 +20,8 @@ class Student(db.Model):
     last_name = db.Column(db.String(80), nullable=False, index=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     phone = db.Column(db.String(30))
+    speciality = db.Column(db.String(80))
+    student_class = db.Column(db.String(30))
     birthdate = db.Column(db.Date)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -28,7 +30,11 @@ class StudentForm(FlaskForm):
     last_name = StringField("Last name", validators=[DataRequired(), Length(max=80)])
     email = StringField("Email", validators=[DataRequired(), Email(), Length(max=120)])
     phone = StringField("Phone", validators=[Optional(), Length(max=30)])
-    birthdate = DateField("Birthdate (YYYY-MM-DD)", validators=[Optional()], format="%Y-%m-%d")
+    speciality = StringField("Speciality", validators=[Optional(), Length(max=80)])
+    student_class = StringField("Class", validators=[Optional(), Length(max=30)])
+    birthdate = DateField(
+        "Birthdate (YYYY-MM-DD)", validators=[Optional()], format="%Y-%m-%d"
+    )
     submit = SubmitField("Save")
 
 @app.route("/", methods=["GET"])
@@ -58,6 +64,8 @@ def create_student():
             last_name=form.last_name.data,
             email=form.email.data,
             phone=form.phone.data or None,
+            speciality=form.speciality.data or None,
+            student_class=form.student_class.data or None,
             birthdate=form.birthdate.data or None,
         )
         db.session.add(s)
@@ -84,6 +92,8 @@ def edit_student(student_id):
         s.last_name = form.last_name.data
         s.email = form.email.data
         s.phone = form.phone.data or None
+        s.speciality = form.speciality.data or None
+        s.student_class = form.student_class.data or None
         s.birthdate = form.birthdate.data or None
         try:
             db.session.commit()
