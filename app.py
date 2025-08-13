@@ -5,6 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import FlaskForm
 from wtforms import StringField, DateField, SubmitField
 from wtforms.validators import DataRequired, Email, Optional, Length
+from sqlalchemy import inspect, text
 import os
 
 app = Flask(__name__)
@@ -118,6 +119,15 @@ def health():
 
 with app.app_context():
     db.create_all()
+
+    # Simple schema upgrade for existing databases without new columns
+    inspector = inspect(db.engine)
+    columns = [col["name"] for col in inspector.get_columns("student")]
+    with db.engine.begin() as conn:
+        if "speciality" not in columns:
+            conn.execute(text("ALTER TABLE student ADD COLUMN speciality VARCHAR(80)"))
+        if "student_class" not in columns:
+            conn.execute(text("ALTER TABLE student ADD COLUMN student_class VARCHAR(30)"))
 
 if __name__ == "__main__":
     app.run(debug=True)
