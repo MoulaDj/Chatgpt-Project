@@ -1,133 +1,286 @@
+from datetime import date, datetime
+import os
 
-from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, flash, redirect, render_template, request, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import FlaskForm
-from wtforms import StringField, DateField, SubmitField
-from wtforms.validators import DataRequired, Email, Optional, Length
-from sqlalchemy import inspect, text
-import os
+from sqlalchemy import CheckConstraint, UniqueConstraint
+from wtforms import DateField, FloatField, SelectField, StringField, SubmitField, TextAreaField
+from wtforms.validators import DataRequired, NumberRange, Optional
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-me-in-production")
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///students.db"
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///leave_app.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
-class Student(db.Model):
+
+class Team(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    first_name = db.Column(db.String(80), nullable=False, index=True)
-    last_name = db.Column(db.String(80), nullable=False, index=True)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    phone = db.Column(db.String(30))
-    speciality = db.Column(db.String(80))
-    student_class = db.Column(db.String(30))
-    birthdate = db.Column(db.Date)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    name = db.Column(db.String(120), unique=True, nullable=False)
 
-class StudentForm(FlaskForm):
-    first_name = StringField("First name", validators=[DataRequired(), Length(max=80)])
-    last_name = StringField("Last name", validators=[DataRequired(), Length(max=80)])
-    email = StringField("Email", validators=[DataRequired(), Email(), Length(max=120)])
-    phone = StringField("Phone", validators=[Optional(), Length(max=30)])
-    speciality = StringField("Speciality", validators=[Optional(), Length(max=80)])
-    student_class = StringField("Class", validators=[Optional(), Length(max=30)])
-    birthdate = DateField(
-        "Birthdate (YYYY-MM-DD)", validators=[Optional()], format="%Y-%m-%d"
+
+class Employee(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    first_name = db.Column(db.String(120), nullable=False)
+    last_name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    role = db.Column(db.String(40), nullable=False, default="EMPLOYEE")
+    leave_balance = db.Column(db.Float, nullable=False, default=0)
+    leave_reserved = db.Column(db.Float, nullable=False, default=0)
+    recovery_balance = db.Column(db.Float, nullable=False, default=0)
+    recovery_reserved = db.Column(db.Float, nullable=False, default=0)
+
+    team_id = db.Column(db.Integer, db.ForeignKey("team.id"))
+    functional_manager_id = db.Column(db.Integer, db.ForeignKey("employee.id"))
+    hierarchical_manager_id = db.Column(db.Integer, db.ForeignKey("employee.id"))
+
+    team = db.relationship("Team", backref="employees")
+
+    __table_args__ = (
+        CheckConstraint("leave_balance >= 0"),
+        CheckConstraint("leave_reserved >= 0"),
+        CheckConstraint("recovery_balance >= 0"),
+        CheckConstraint("recovery_reserved >= 0"),
     )
-    submit = SubmitField("Save")
 
-@app.route("/", methods=["GET"])
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
+
+
+class LeaveRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey("employee.id"), nullable=False)
+    request_type = db.Column(db.String(20), nullable=False)  # LEAVE / RECOVERY / AUTH
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    reason = db.Column(db.Text)
+    status = db.Column(db.String(30), nullable=False, default="PENDING_FUNCTIONAL")
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now())
+
+    functional_decision = db.Column(db.String(20), default="PENDING")
+    hierarchical_decision = db.Column(db.String(20), default="PENDING")
+    hr_decision = db.Column(db.String(20), default="PENDING")
+
+    employee = db.relationship("Employee", backref="requests")
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0"),
+        CheckConstraint("start_date <= end_date"),
+    )
+
+
+class EmployeeForm(FlaskForm):
+    first_name = StringField("Prénom", validators=[DataRequired()])
+    last_name = StringField("Nom", validators=[DataRequired()])
+    email = StringField("Email", validators=[DataRequired()])
+    role = SelectField(
+        "Rôle",
+        choices=[
+            ("EMPLOYEE", "Employé"),
+            ("MANAGER_FUNCTIONAL", "Manager fonctionnel"),
+            ("MANAGER_HIERARCHICAL", "Manager hiérarchique"),
+            ("HR", "RH"),
+        ],
+        validators=[DataRequired()],
+    )
+    team_id = SelectField("Équipe", coerce=int, validators=[Optional()])
+    functional_manager_id = SelectField("Manager fonctionnel", coerce=int, validators=[Optional()])
+    hierarchical_manager_id = SelectField("Manager hiérarchique", coerce=int, validators=[Optional()])
+    leave_balance = FloatField("Solde congé", validators=[DataRequired(), NumberRange(min=0)])
+    recovery_balance = FloatField("Solde récupération", validators=[DataRequired(), NumberRange(min=0)])
+    submit = SubmitField("Enregistrer")
+
+
+class LeaveRequestForm(FlaskForm):
+    employee_id = SelectField("Employé", coerce=int, validators=[DataRequired()])
+    request_type = SelectField(
+        "Type",
+        choices=[("LEAVE", "Congé"), ("RECOVERY", "Récupération"), ("AUTH", "Autorisation")],
+        validators=[DataRequired()],
+    )
+    start_date = DateField("Date début", validators=[DataRequired()], format="%Y-%m-%d")
+    end_date = DateField("Date fin", validators=[DataRequired()], format="%Y-%m-%d")
+    quantity = FloatField("Quantité (jours/heures)", validators=[DataRequired(), NumberRange(min=0.5)])
+    reason = TextAreaField("Motif", validators=[Optional()])
+    submit = SubmitField("Soumettre")
+
+
+def _seed_if_empty():
+    if Employee.query.count() > 0:
+        return
+    t1 = Team(name="IT")
+    t2 = Team(name="RH")
+    db.session.add_all([t1, t2])
+    db.session.flush()
+
+    hr = Employee(first_name="Sami", last_name="Rahmani", email="sami@company.com", role="HR", team=t2, leave_balance=30, recovery_balance=15)
+    mf = Employee(first_name="Nadia", last_name="Benali", email="nadia@company.com", role="MANAGER_FUNCTIONAL", team=t1, leave_balance=25, recovery_balance=10)
+    mh = Employee(first_name="Karim", last_name="Haddad", email="karim@company.com", role="MANAGER_HIERARCHICAL", team=t1, leave_balance=25, recovery_balance=10)
+    emp = Employee(
+        first_name="Yassine",
+        last_name="Mansouri",
+        email="yassine@company.com",
+        role="EMPLOYEE",
+        team=t1,
+        leave_balance=20,
+        recovery_balance=8,
+        functional_manager_id=2,
+        hierarchical_manager_id=3,
+    )
+    db.session.add_all([hr, mf, mh, emp])
+    db.session.commit()
+
+
+def reserve_balance(employee: Employee, request_type: str, qty: float):
+    if request_type == "AUTH":
+        return True, ""
+    if request_type == "LEAVE":
+        available = employee.leave_balance - employee.leave_reserved
+        if available < qty:
+            return False, f"Solde congé insuffisant ({available:.1f} disponible)."
+        employee.leave_reserved += qty
+    elif request_type == "RECOVERY":
+        available = employee.recovery_balance - employee.recovery_reserved
+        if available < qty:
+            return False, f"Solde récupération insuffisant ({available:.1f} disponible)."
+        employee.recovery_reserved += qty
+    return True, ""
+
+
+def release_or_consume(request_obj: LeaveRequest, action: str):
+    employee = request_obj.employee
+    qty = request_obj.quantity
+    if request_obj.request_type == "AUTH":
+        return
+    if request_obj.request_type == "LEAVE":
+        if action == "release":
+            employee.leave_reserved = max(0, employee.leave_reserved - qty)
+        else:
+            employee.leave_reserved = max(0, employee.leave_reserved - qty)
+            employee.leave_balance = max(0, employee.leave_balance - qty)
+    if request_obj.request_type == "RECOVERY":
+        if action == "release":
+            employee.recovery_reserved = max(0, employee.recovery_reserved - qty)
+        else:
+            employee.recovery_reserved = max(0, employee.recovery_reserved - qty)
+            employee.recovery_balance = max(0, employee.recovery_balance - qty)
+
+
+@app.route("/")
 def index():
-    q = request.args.get("q", "").strip()
-    page = request.args.get("page", 1, type=int)
-    query = Student.query
-    if q:
-        like = f"%{q}%"
-        query = query.filter(
-            db.or_(
-                Student.first_name.ilike(like),
-                Student.last_name.ilike(like),
-                Student.email.ilike(like),
-                Student.phone.ilike(like),
-            )
-        )
-    students = query.order_by(Student.created_at.desc()).paginate(page=page, per_page=10)
-    return render_template("index.html", students=students, q=q)
+    return render_template("dashboard.html", employees=Employee.query.all(), requests=LeaveRequest.query.order_by(LeaveRequest.created_at.desc()).all())
 
-@app.route("/students/new", methods=["GET", "POST"])
-def create_student():
-    form = StudentForm()
+
+@app.route("/employees/new", methods=["GET", "POST"])
+def create_employee():
+    form = EmployeeForm()
+    teams = Team.query.order_by(Team.name).all()
+    employees = Employee.query.order_by(Employee.first_name).all()
+    form.team_id.choices = [(0, "--")]+[(t.id, t.name) for t in teams]
+    form.functional_manager_id.choices = [(0, "--")]+[(e.id, e.full_name) for e in employees]
+    form.hierarchical_manager_id.choices = [(0, "--")]+[(e.id, e.full_name) for e in employees]
+
     if form.validate_on_submit():
-        s = Student(
+        e = Employee(
             first_name=form.first_name.data,
             last_name=form.last_name.data,
             email=form.email.data,
-            phone=form.phone.data or None,
-            speciality=form.speciality.data or None,
-            student_class=form.student_class.data or None,
-            birthdate=form.birthdate.data or None,
+            role=form.role.data,
+            team_id=form.team_id.data or None,
+            functional_manager_id=form.functional_manager_id.data or None,
+            hierarchical_manager_id=form.hierarchical_manager_id.data or None,
+            leave_balance=form.leave_balance.data,
+            recovery_balance=form.recovery_balance.data,
         )
-        db.session.add(s)
-        try:
-            db.session.commit()
-            flash("Student created successfully.", "success")
-            return redirect(url_for("index"))
-        except Exception:
-            db.session.rollback()
-            flash("Email must be unique or data invalid.", "danger")
-    return render_template("form.html", form=form, title="Add student")
+        db.session.add(e)
+        db.session.commit()
+        flash("Employé créé.", "success")
+        return redirect(url_for("index"))
+    return render_template("employee_form.html", form=form)
 
-@app.route("/students/<int:student_id>", methods=["GET"])
-def show_student(student_id):
-    s = Student.query.get_or_404(student_id)
-    return render_template("show.html", s=s)
 
-@app.route("/students/<int:student_id>/edit", methods=["GET", "POST"])
-def edit_student(student_id):
-    s = Student.query.get_or_404(student_id)
-    form = StudentForm(obj=s)
+@app.route("/requests/new", methods=["GET", "POST"])
+def create_request():
+    form = LeaveRequestForm()
+    employees = Employee.query.order_by(Employee.first_name).all()
+    form.employee_id.choices = [(e.id, e.full_name) for e in employees]
+
     if form.validate_on_submit():
-        s.first_name = form.first_name.data
-        s.last_name = form.last_name.data
-        s.email = form.email.data
-        s.phone = form.phone.data or None
-        s.speciality = form.speciality.data or None
-        s.student_class = form.student_class.data or None
-        s.birthdate = form.birthdate.data or None
-        try:
-            db.session.commit()
-            flash("Student updated.", "success")
-            return redirect(url_for("show_student", student_id=s.id))
-        except Exception:
-            db.session.rollback()
-            flash("Update failed (email must be unique?).", "danger")
-    return render_template("form.html", form=form, title="Edit student")
+        employee = Employee.query.get_or_404(form.employee_id.data)
+        ok, message = reserve_balance(employee, form.request_type.data, form.quantity.data)
+        if not ok:
+            flash(message, "danger")
+            return render_template("request_form.html", form=form)
 
-@app.route("/students/<int:student_id>/delete", methods=["POST"])
-def delete_student(student_id):
-    s = Student.query.get_or_404(student_id)
-    db.session.delete(s)
+        request_obj = LeaveRequest(
+            employee_id=employee.id,
+            request_type=form.request_type.data,
+            start_date=form.start_date.data,
+            end_date=form.end_date.data,
+            quantity=form.quantity.data,
+            reason=form.reason.data,
+            status="PENDING_FUNCTIONAL",
+        )
+        db.session.add(request_obj)
+        db.session.commit()
+        flash("Demande soumise, solde réservé.", "success")
+        return redirect(url_for("index"))
+    return render_template("request_form.html", form=form)
+
+
+@app.route("/requests/<int:request_id>/<string:stage>/<string:decision>", methods=["POST"])
+def review_request(request_id: int, stage: str, decision: str):
+    request_obj = LeaveRequest.query.get_or_404(request_id)
+    if request_obj.status in {"REJECTED", "APPROVED"}:
+        flash("Cette demande est déjà finalisée.", "warning")
+        return redirect(url_for("index"))
+
+    if decision not in {"approve", "reject"}:
+        flash("Action invalide.", "danger")
+        return redirect(url_for("index"))
+
+    if stage == "functional" and request_obj.status == "PENDING_FUNCTIONAL":
+        request_obj.functional_decision = "APPROVED" if decision == "approve" else "REJECTED"
+        if decision == "approve":
+            request_obj.status = "PENDING_HIERARCHICAL"
+        else:
+            request_obj.status = "REJECTED"
+            release_or_consume(request_obj, "release")
+    elif stage == "hierarchical" and request_obj.status == "PENDING_HIERARCHICAL":
+        request_obj.hierarchical_decision = "APPROVED" if decision == "approve" else "REJECTED"
+        if decision == "approve":
+            release_or_consume(request_obj, "consume")
+            request_obj.status = "PENDING_HR"
+        else:
+            request_obj.status = "REJECTED"
+            release_or_consume(request_obj, "release")
+    elif stage == "hr" and request_obj.status == "PENDING_HR":
+        request_obj.hr_decision = "APPROVED" if decision == "approve" else "REJECTED"
+        request_obj.status = "APPROVED" if decision == "approve" else "REJECTED"
+        if decision == "reject":
+            flash("RH a rejeté après consommation: prévoir régularisation manuelle si nécessaire.", "warning")
+    else:
+        flash("Étape non valide pour cette demande.", "danger")
+        return redirect(url_for("index"))
+
     db.session.commit()
-    flash("Student deleted.", "info")
+    flash("Demande mise à jour.", "success")
     return redirect(url_for("index"))
+
 
 @app.route("/__health")
 def health():
-    return {"status": "ok", "students": Student.query.count()}
+    return {"status": "ok", "employees": Employee.query.count(), "requests": LeaveRequest.query.count()}
+
 
 with app.app_context():
     db.create_all()
+    _seed_if_empty()
 
-    # Simple schema upgrade for existing databases without new columns
-    inspector = inspect(db.engine)
-    columns = [col["name"] for col in inspector.get_columns("student")]
-    with db.engine.begin() as conn:
-        if "speciality" not in columns:
-            conn.execute(text("ALTER TABLE student ADD COLUMN speciality VARCHAR(80)"))
-        if "student_class" not in columns:
-            conn.execute(text("ALTER TABLE student ADD COLUMN student_class VARCHAR(30)"))
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)

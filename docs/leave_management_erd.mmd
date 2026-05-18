@@ -1,0 +1,106 @@
+erDiagram
+    teams ||--o{ employees : has
+    employees ||--o{ employees : functional_manager_of
+    employees ||--o{ employees : hierarchical_manager_of
+    employees ||--o{ employee_roles : assigned
+    roles ||--o{ employee_roles : grants
+    employees ||--o{ employee_balances : owns
+    employees ||--o{ leave_requests : creates
+    leave_types ||--o{ leave_requests : categorizes
+    leave_requests ||--o{ request_approvals : workflow
+    employees ||--o{ request_approvals : decides
+    leave_requests ||--o{ balance_transactions : impacts
+    employees ||--o{ balance_transactions : owns
+    leave_requests ||--o{ request_attachments : contains
+    employees ||--o{ notifications : receives
+    employees ||--o{ audit_logs : acts
+
+    teams {
+      bigint id PK
+      varchar name UK
+      text description
+    }
+    employees {
+      bigint id PK
+      varchar employee_code UK
+      varchar first_name
+      varchar last_name
+      varchar email UK
+      bigint team_id FK
+      bigint functional_manager_id FK
+      bigint hierarchical_manager_id FK
+    }
+    roles {
+      bigint id PK
+      role_code code UK
+      varchar label
+    }
+    employee_roles {
+      bigint id PK
+      bigint employee_id FK
+      bigint role_id FK
+    }
+    leave_types {
+      bigint id PK
+      varchar code UK
+      varchar label
+      balance_bucket balance_bucket
+      request_unit unit
+    }
+    employee_balances {
+      bigint id PK
+      bigint employee_id FK
+      balance_bucket bucket
+      numeric acquired_amount
+      numeric used_amount
+      numeric reserved_amount
+      numeric available_amount
+    }
+    leave_requests {
+      bigint id PK
+      varchar request_number UK
+      bigint employee_id FK
+      bigint leave_type_id FK
+      date start_date
+      date end_date
+      numeric requested_quantity
+      request_status status
+      bigint current_approver_id FK
+    }
+    request_approvals {
+      bigint id PK
+      bigint leave_request_id FK
+      smallint step_order
+      role_code step_role
+      bigint approver_id FK
+      approval_decision decision
+    }
+    balance_transactions {
+      bigint id PK
+      bigint employee_id FK
+      balance_bucket bucket
+      bigint request_id FK
+      transaction_type transaction_type
+      numeric amount
+      transaction_direction direction
+    }
+    request_attachments {
+      bigint id PK
+      bigint leave_request_id FK
+      varchar file_name
+      text file_path
+    }
+    notifications {
+      bigint id PK
+      bigint employee_id FK
+      notification_channel channel
+      varchar title
+      text message
+    }
+    audit_logs {
+      bigint id PK
+      bigint actor_id FK
+      varchar entity_type
+      bigint entity_id
+      varchar action
+    }

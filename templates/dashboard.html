@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<h4 class="mb-3">Launchpad</h4>
+<div class="row g-3 mb-4">
+  {% for e in employees %}
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h6 class="mb-1">{{ e.full_name }} <span class="badge text-bg-secondary">{{ e.role }}</span></h6>
+        <div class="small text-muted">{{ e.email }}</div>
+        <div class="mt-2 small">Congé: {{ '%.1f'|format(e.leave_balance) }} (réservé {{ '%.1f'|format(e.leave_reserved) }})</div>
+        <div class="small">Récup: {{ '%.1f'|format(e.recovery_balance) }} (réservé {{ '%.1f'|format(e.recovery_reserved) }})</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h5>Demandes</h5>
+    <div class="table-responsive">
+      <table class="table table-hover">
+        <thead>
+          <tr><th>ID</th><th>Employé</th><th>Type</th><th>Période</th><th>Qté</th><th>Statut</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for r in requests %}
+          <tr>
+            <td>{{ r.id }}</td>
+            <td>{{ r.employee.full_name }}</td>
+            <td>{{ r.request_type }}</td>
+            <td>{{ r.start_date }} → {{ r.end_date }}</td>
+            <td>{{ r.quantity }}</td>
+            <td><span class="badge text-bg-info">{{ r.status }}</span></td>
+            <td class="d-flex gap-1 flex-wrap">
+              {% if r.status == 'PENDING_FUNCTIONAL' %}
+              <form method="post" action="{{ url_for('review_request', request_id=r.id, stage='functional', decision='approve') }}"><button class="btn btn-sm btn-success">MF ✅</button></form>
+              <form method="post" action="{{ url_for('review_request', request_id=r.id, stage='functional', decision='reject') }}"><button class="btn btn-sm btn-danger">MF ❌</button></form>
+              {% elif r.status == 'PENDING_HIERARCHICAL' %}
+              <form method="post" action="{{ url_for('review_request', request_id=r.id, stage='hierarchical', decision='approve') }}"><button class="btn btn-sm btn-success">MH ✅</button></form>
+              <form method="post" action="{{ url_for('review_request', request_id=r.id, stage='hierarchical', decision='reject') }}"><button class="btn btn-sm btn-danger">MH ❌</button></form>
+              {% elif r.status == 'PENDING_HR' %}
+              <form method="post" action="{{ url_for('review_request', request_id=r.id, stage='hr', decision='approve') }}"><button class="btn btn-sm btn-success">RH ✅</button></form>
+              <form method="post" action="{{ url_for('review_request', request_id=r.id, stage='hr', decision='reject') }}"><button class="btn btn-sm btn-danger">RH ❌</button></form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="text-center text-muted">Aucune demande.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
